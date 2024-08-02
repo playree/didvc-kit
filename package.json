@@ -5,9 +5,17 @@
   "author": "Kazuki Minakawa",
   "license": "MIT",
   "packageManager": "yarn@4.3.1",
+  "scripts": {
+    "lint": "eslint"
+  },
   "devDependencies": {
+    "@types/eslint": "^9",
     "@types/node": "^22.0.2",
+    "eslint": "9.x",
+    "globals": "^15.9.0",
+    "prettier": "^3.3.3",
     "ts-node": "^10.9.2",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.0.0"
   }
 }
