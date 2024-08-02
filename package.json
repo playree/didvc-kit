@@ -6,10 +6,15 @@
   "license": "MIT",
   "packageManager": "yarn@4.3.1",
   "scripts": {
+    "build": "tsc",
     "lint": "eslint"
+  },
+  "dependencies": {
+    "elliptic": "^6.5.6"
   },
   "devDependencies": {
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
+    "@types/elliptic": "^6",
     "@types/eslint": "^9",
     "@types/node": "^22.0.2",
     "eslint": "9.x",
