@@ -1,11 +1,46 @@
-import { ec } from 'elliptic'
+import { ec, eddsa } from 'elliptic'
 import bs58 from 'bs58'
 
+const getDidEc = (keyPair: ec.KeyPair) => {
+  const multicodec = 'e701'
+  const pub = keyPair.getPublic()
+  const xhex = pub.getX().toBuffer().toString('hex')
+  const yhex = pub.getY().toBuffer().toString('hex')
+  const pubkey = `${parseInt(yhex.slice(-1), 16) % 2 == 1 ? '03' : '02'}${xhex}`
+  return `did:key:z${bs58.encode(Buffer.from(`${multicodec}${pubkey}`, 'hex'))}`
+}
+
+const getDidEd = (keyPair: eddsa.KeyPair) => {
+  const multicodec = 'ed01'
+  const pubkey = keyPair.getPublic('hex')
+  return `did:key:z${bs58.encode(Buffer.from(`${multicodec}${pubkey}`, 'hex'))}`
+}
+
+const getPublicJwkEc = (keyPair: ec.KeyPair) => {
+  const pub = keyPair.getPublic()
+  return {
+    kty: 'EC',
+    crv: 'secp256k1',
+    x: pub.getX().toBuffer().toString('base64url'),
+    y: pub.getY().toBuffer().toString('base64url'),
+  }
+}
+
+const getPublicJwkEd = (keyPair: eddsa.KeyPair) => {
+  const pub = keyPair.getPublic()
+  return {
+    kty: 'OKP',
+    crv: 'Ed25519',
+    x: pub.toString('base64url'),
+  }
+}
+
 export class DidKey {
-  public keyPair: ec.KeyPair
   public did: string
 
-  constructor(keyPair?: ec.KeyPair) {
+  private keyPair: ec.KeyPair | eddsa.KeyPair
+
+  constructor(keyPair?: ec.KeyPair | eddsa.KeyPair) {
     if (keyPair) {
       this.keyPair = keyPair
     } else {
@@ -13,28 +48,25 @@ export class DidKey {
       this.keyPair = secp256k1.genKeyPair()
     }
 
-    const pub = this.keyPair.getPublic()
-    const xhex = pub.getX().toBuffer().toString('hex')
-    const yhex = pub.getY().toBuffer().toString('hex')
-
-    const multicodec = 'e701'
-    const pubkey = `${parseInt(yhex.slice(-1), 16) % 2 == 1 ? '03' : '02'}${xhex}`
-    console.debug('hex:', multicodec, pubkey)
-
-    this.did = `did:key:z${bs58.encode(Buffer.from(`${multicodec}${pubkey}`, 'hex'))}`
-  }
-
-  getPublicJwk(): JsonWebKey {
-    const pub = this.keyPair.getPublic()
-    return {
-      kty: 'EC',
-      crv: 'secp256k1',
-      x: pub.getX().toBuffer().toString('base64url'),
-      y: pub.getY().toBuffer().toString('base64url'),
+    if ('ec' in this.keyPair) {
+      this.did = getDidEc(this.keyPair)
+    } else {
+      this.did = getDidEd(this.keyPair)
     }
   }
 
+  getPublicJwk(): JsonWebKey {
+    if ('ec' in this.keyPair) {
+      return getPublicJwkEc(this.keyPair)
+    }
+    return getPublicJwkEd(this.keyPair)
+  }
+
   getPrivateJwk(): JsonWebKey | undefined {
+    if (!('ec' in this.keyPair)) {
+      return undefined
+    }
+
     const prv = this.keyPair.getPrivate()
     if (!prv) {
       return undefined
@@ -48,7 +80,6 @@ export class DidKey {
   }
 
   static importDid(did: string) {
-    const secp256k1 = new ec('secp256k1')
     const parts = did.split(':')
     if (parts.length < 3) {
       throw new Error('did has invalid format')
@@ -78,8 +109,18 @@ export class DidKey {
     }
 
     const data = bs58.decode(multibaseValue.substring(1))
-    const keyPair = secp256k1.keyFromPublic(data.slice(2))
-    return new DidKey(keyPair)
+    console.debug('data:', data.slice(2).length)
+    const multicodec = Buffer.from(data.slice(0, 2)).toString('hex')
+    switch (multicodec) {
+      case 'e701':
+        const secp256k1 = new ec('secp256k1')
+        return new DidKey(secp256k1.keyFromPublic(data.slice(2)))
+      case 'ed01':
+        const ed25519 = new eddsa('ed25519')
+        return new DidKey(ed25519.keyFromPublic(Buffer.from(data.slice(2))))
+      default:
+        throw new Error(`multicodec ${multicodec} is not supported`)
+    }
   }
 }
 
