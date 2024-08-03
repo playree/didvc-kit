@@ -3,10 +3,7 @@ import bs58 from 'bs58'
 
 const getDidEc = (keyPair: ec.KeyPair) => {
   const multicodec = 'e701'
-  const pub = keyPair.getPublic()
-  const xhex = pub.getX().toBuffer().toString('hex')
-  const yhex = pub.getY().toBuffer().toString('hex')
-  const pubkey = `${parseInt(yhex.slice(-1), 16) % 2 == 1 ? '03' : '02'}${xhex}`
+  const pubkey = keyPair.getPublic().encode('hex', true)
   return `did:key:z${bs58.encode(Buffer.from(`${multicodec}${pubkey}`, 'hex'))}`
 }
 
@@ -108,7 +105,6 @@ export class DidKey {
     }
 
     const data = bs58.decode(multibaseValue.substring(1))
-    console.debug('data:', data.slice(2).length)
     const multicodec = Buffer.from(data.slice(0, 2)).toString('hex')
     switch (multicodec) {
       case 'e701':
