@@ -37,8 +37,7 @@ const getPublicJwkEd = (keyPair: eddsa.KeyPair) => {
 
 export class DidKey {
   public did: string
-
-  private keyPair: ec.KeyPair | eddsa.KeyPair
+  public keyPair: ec.KeyPair | eddsa.KeyPair
 
   constructor(keyPair?: ec.KeyPair | eddsa.KeyPair) {
     if (keyPair) {
@@ -79,7 +78,7 @@ export class DidKey {
     }
   }
 
-  static importDid(did: string) {
+  static fromDid(did: string) {
     const parts = did.split(':')
     if (parts.length < 3) {
       throw new Error('did has invalid format')

@@ -10,7 +10,7 @@ const main = async () => {
   const pub1 = key1.getPublicJwk()
   console.log('pub1:', pub1)
 
-  const key2 = DidKey.importDid(key1.did)
+  const key2 = DidKey.fromDid(key1.did)
   console.log('key2:', key2)
 
   const prv2 = key2.getPrivateJwk()
@@ -19,7 +19,7 @@ const main = async () => {
   const pub2 = key2.getPublicJwk()
   console.log('pub2:', pub2)
 
-  const key3 = DidKey.importDid('did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp')
+  const key3 = DidKey.fromDid('did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp')
   console.log('key3:', key3)
 
   const pub3 = key3.getPublicJwk()
