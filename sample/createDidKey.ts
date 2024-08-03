@@ -1,4 +1,4 @@
-import DidKey from '../src/did/didKey'
+import DidKey from '@kit/did/didKey'
 
 const main = async () => {
   const key = new DidKey()
