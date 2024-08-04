@@ -155,13 +155,13 @@ export class DidKey {
     const data = bs58.decode(multibaseValue.substring(1))
     const multicodec = getNameFromData(data)
     switch (multicodec) {
-      case 'secp256k1-pub': //VM.secp256k1.multicodec:
+      case 'secp256k1-pub':
         const secp256k1 = new ec(VM.secp256k1.elliptic)
         return new DidKey({ keyPair: secp256k1.keyFromPublic(data.slice(2)), curve: 'secp256k1' })
-      case 'p256-pub': //VM.p256.multicodec:
+      case 'p256-pub':
         const p256 = new ec(VM.p256.elliptic)
         return new DidKey({ keyPair: p256.keyFromPublic(data.slice(2)), curve: 'p256' })
-      case 'ed25519-pub': //VM.ed25519.multicodec:
+      case 'ed25519-pub':
         const ed25519 = new eddsa(VM.ed25519.elliptic)
         return new DidKey({ keyPair: ed25519.keyFromPublic(Buffer.from(data.slice(2))), curve: 'ed25519' })
       default:
