@@ -1,33 +1,59 @@
 import { ec, eddsa } from 'elliptic'
 import bs58 from 'bs58'
+import { getNameFromData, addPrefix, CodecName } from 'multicodec'
 
-const getDidEc = (keyPair: ec.KeyPair) => {
-  const multicodec = 'e701'
-  const pubkey = keyPair.getPublic().encode('hex', true)
-  return `did:key:z${bs58.encode(Buffer.from(`${multicodec}${pubkey}`, 'hex'))}`
-}
+type EllipticEc = 'secp256k1' | 'p256'
+type EllipticEd = 'ed25519'
 
-const getDidEd = (keyPair: eddsa.KeyPair) => {
-  const multicodec = 'ed01'
-  const pubkey = keyPair.getPublic('hex')
-  return `did:key:z${bs58.encode(Buffer.from(`${multicodec}${pubkey}`, 'hex'))}`
-}
-
-const getPublicJwkEc = (keyPair: ec.KeyPair) => {
-  const pub = keyPair.getPublic()
-  return {
+/**
+ * Verification Methods
+ */
+const VM = {
+  secp256k1: {
     kty: 'EC',
     crv: 'secp256k1',
+    type: 'EcdsaSecp256k1VerificationKey2019',
+    elliptic: 'secp256k1' as EllipticEc,
+  },
+  p256: {
+    kty: 'EC',
+    crv: 'P-256',
+    type: 'JsonWebKey2020',
+    elliptic: 'p256' as EllipticEc,
+  },
+  ed25519: {
+    kty: 'OKP',
+    crv: 'Ed25519',
+    type: 'Ed25519VerificationKey2018',
+    elliptic: 'ed25519' as EllipticEd,
+  },
+}
+
+const getDidEc = (keyPair: ec.KeyPair, codecName: CodecName) => {
+  const pubkey = keyPair.getPublic().encode('hex', true)
+  return `did:key:z${bs58.encode(addPrefix(codecName, Buffer.from(pubkey, 'hex')))}`
+}
+
+const getDidEd = (keyPair: eddsa.KeyPair, codecName: CodecName) => {
+  const pubkey = keyPair.getPublic('hex')
+  return `did:key:z${bs58.encode(addPrefix(codecName, Buffer.from(pubkey, 'hex')))}`
+}
+
+const getPublicJwkEc = (keyPair: ec.KeyPair, op: { kty: string; crv: string }) => {
+  const pub = keyPair.getPublic()
+  return {
+    kty: op.kty,
+    crv: op.crv,
     x: pub.getX().toBuffer().toString('base64url'),
     y: pub.getY().toBuffer().toString('base64url'),
   }
 }
 
-const getPublicJwkEd = (keyPair: eddsa.KeyPair) => {
+const getPublicJwkEd = (keyPair: eddsa.KeyPair, op: { kty: string; crv: string }) => {
   const pub = keyPair.getPublic()
   return {
-    kty: 'OKP',
-    crv: 'Ed25519',
+    kty: op.kty,
+    crv: op.crv,
     x: pub.toString('base64url'),
   }
 }
@@ -35,27 +61,49 @@ const getPublicJwkEd = (keyPair: eddsa.KeyPair) => {
 export class DidKey {
   public did: string
   public keyPair: ec.KeyPair | eddsa.KeyPair
+  public curve: EllipticEc | EllipticEd
 
-  constructor(keyPair?: ec.KeyPair | eddsa.KeyPair) {
-    if (keyPair) {
-      this.keyPair = keyPair
+  constructor(key?: { keyPair: ec.KeyPair | eddsa.KeyPair; curve: EllipticEc | EllipticEd }) {
+    if (key) {
+      this.keyPair = key.keyPair
+      this.curve = key.curve
     } else {
-      const secp256k1 = new ec('secp256k1')
+      const secp256k1 = new ec(VM.secp256k1.elliptic)
       this.keyPair = secp256k1.genKeyPair()
+      this.curve = 'secp256k1'
     }
 
     if ('ec' in this.keyPair) {
-      this.did = getDidEc(this.keyPair)
+      switch (this.curve) {
+        case 'secp256k1':
+          this.did = getDidEc(this.keyPair, 'secp256k1-pub')
+          break
+        case 'p256':
+          this.did = getDidEc(this.keyPair, 'p256-pub')
+          break
+        default:
+          throw new Error('not supported')
+      }
     } else {
-      this.did = getDidEd(this.keyPair)
+      switch (this.curve) {
+        case 'ed25519':
+          this.did = getDidEd(this.keyPair, 'ed25519-pub')
+          break
+        default:
+          throw new Error('not supported')
+      }
     }
   }
 
   getPublicJwk(): JsonWebKey {
-    if ('ec' in this.keyPair) {
-      return getPublicJwkEc(this.keyPair)
+    switch (this.curve) {
+      case 'secp256k1':
+        return getPublicJwkEc(this.keyPair as ec.KeyPair, VM.secp256k1)
+      case 'p256':
+        return getPublicJwkEc(this.keyPair as ec.KeyPair, VM.p256)
+      case 'ed25519':
+        return getPublicJwkEd(this.keyPair as eddsa.KeyPair, VM.ed25519)
     }
-    return getPublicJwkEd(this.keyPair)
   }
 
   getPrivateJwk(): JsonWebKey | undefined {
@@ -105,14 +153,17 @@ export class DidKey {
     }
 
     const data = bs58.decode(multibaseValue.substring(1))
-    const multicodec = Buffer.from(data.slice(0, 2)).toString('hex')
+    const multicodec = getNameFromData(data)
     switch (multicodec) {
-      case 'e701':
-        const secp256k1 = new ec('secp256k1')
-        return new DidKey(secp256k1.keyFromPublic(data.slice(2)))
-      case 'ed01':
-        const ed25519 = new eddsa('ed25519')
-        return new DidKey(ed25519.keyFromPublic(Buffer.from(data.slice(2))))
+      case 'secp256k1-pub': //VM.secp256k1.multicodec:
+        const secp256k1 = new ec(VM.secp256k1.elliptic)
+        return new DidKey({ keyPair: secp256k1.keyFromPublic(data.slice(2)), curve: 'secp256k1' })
+      case 'p256-pub': //VM.p256.multicodec:
+        const p256 = new ec(VM.p256.elliptic)
+        return new DidKey({ keyPair: p256.keyFromPublic(data.slice(2)), curve: 'p256' })
+      case 'ed25519-pub': //VM.ed25519.multicodec:
+        const ed25519 = new eddsa(VM.ed25519.elliptic)
+        return new DidKey({ keyPair: ed25519.keyFromPublic(Buffer.from(data.slice(2))), curve: 'ed25519' })
       default:
         throw new Error(`multicodec ${multicodec} is not supported`)
     }
