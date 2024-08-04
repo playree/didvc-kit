@@ -1,9 +1,10 @@
 import { ec, eddsa } from 'elliptic'
 import bs58 from 'bs58'
-import { getNameFromData, addPrefix, CodecName } from 'multicodec'
+import { getNameFromData, addPrefix, CodecName, rmPrefix } from 'multicodec'
 
 type EllipticEc = 'secp256k1' | 'p256'
 type EllipticEd = 'ed25519'
+type SupportedCrv = 'secp256k1' | 'P-256' | 'Ed25519'
 
 /**
  * Verification Methods
@@ -30,13 +31,13 @@ const VM = {
 }
 
 const getDidEc = (keyPair: ec.KeyPair, codecName: CodecName) => {
-  const pubkey = keyPair.getPublic().encode('hex', true)
+  const pubkey = keyPair.getPublic().encodeCompressed('hex')
   return `did:key:z${bs58.encode(addPrefix(codecName, Buffer.from(pubkey, 'hex')))}`
 }
 
 const getDidEd = (keyPair: eddsa.KeyPair, codecName: CodecName) => {
-  const pubkey = keyPair.getPublic('hex')
-  return `did:key:z${bs58.encode(addPrefix(codecName, Buffer.from(pubkey, 'hex')))}`
+  const pubkey = keyPair.getPublic()
+  return `did:key:z${bs58.encode(addPrefix(codecName, pubkey))}`
 }
 
 const getPublicJwkEc = (keyPair: ec.KeyPair, op: { kty: string; crv: string }) => {
@@ -61,32 +62,32 @@ const getPublicJwkEd = (keyPair: eddsa.KeyPair, op: { kty: string; crv: string }
 export class DidKey {
   public did: string
   public keyPair: ec.KeyPair | eddsa.KeyPair
-  public curve: EllipticEc | EllipticEd
+  public crv: SupportedCrv
 
-  constructor(key?: { keyPair: ec.KeyPair | eddsa.KeyPair; curve: EllipticEc | EllipticEd }) {
+  constructor(key?: { keyPair: ec.KeyPair | eddsa.KeyPair; crv: SupportedCrv }) {
     if (key) {
       this.keyPair = key.keyPair
-      this.curve = key.curve
+      this.crv = key.crv
     } else {
       const secp256k1 = new ec(VM.secp256k1.elliptic)
       this.keyPair = secp256k1.genKeyPair()
-      this.curve = 'secp256k1'
+      this.crv = 'secp256k1'
     }
 
     if ('ec' in this.keyPair) {
-      switch (this.curve) {
+      switch (this.crv) {
         case 'secp256k1':
           this.did = getDidEc(this.keyPair, 'secp256k1-pub')
           break
-        case 'p256':
+        case 'P-256':
           this.did = getDidEc(this.keyPair, 'p256-pub')
           break
         default:
           throw new Error('not supported')
       }
     } else {
-      switch (this.curve) {
-        case 'ed25519':
+      switch (this.crv) {
+        case 'Ed25519':
           this.did = getDidEd(this.keyPair, 'ed25519-pub')
           break
         default:
@@ -96,12 +97,12 @@ export class DidKey {
   }
 
   getPublicJwk(): JsonWebKey {
-    switch (this.curve) {
+    switch (this.crv) {
       case 'secp256k1':
         return getPublicJwkEc(this.keyPair as ec.KeyPair, VM.secp256k1)
-      case 'p256':
+      case 'P-256':
         return getPublicJwkEc(this.keyPair as ec.KeyPair, VM.p256)
-      case 'ed25519':
+      case 'Ed25519':
         return getPublicJwkEd(this.keyPair as eddsa.KeyPair, VM.ed25519)
     }
   }
@@ -157,13 +158,13 @@ export class DidKey {
     switch (multicodec) {
       case 'secp256k1-pub':
         const secp256k1 = new ec(VM.secp256k1.elliptic)
-        return new DidKey({ keyPair: secp256k1.keyFromPublic(data.slice(2)), curve: 'secp256k1' })
+        return new DidKey({ keyPair: secp256k1.keyFromPublic(rmPrefix(data)), crv: 'secp256k1' })
       case 'p256-pub':
         const p256 = new ec(VM.p256.elliptic)
-        return new DidKey({ keyPair: p256.keyFromPublic(data.slice(2)), curve: 'p256' })
+        return new DidKey({ keyPair: p256.keyFromPublic(rmPrefix(data)), crv: 'P-256' })
       case 'ed25519-pub':
         const ed25519 = new eddsa(VM.ed25519.elliptic)
-        return new DidKey({ keyPair: ed25519.keyFromPublic(Buffer.from(data.slice(2))), curve: 'ed25519' })
+        return new DidKey({ keyPair: ed25519.keyFromPublic(Buffer.from(rmPrefix(data))), crv: 'Ed25519' })
       default:
         throw new Error(`multicodec ${multicodec} is not supported`)
     }
